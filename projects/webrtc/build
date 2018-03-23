@@ -101,6 +101,10 @@ GN_ARGS+=" treat_warnings_as_errors=false"
 GN_ARGS+=" is_component_build=false"
 # Do not use bundled utilities.
 GN_ARGS+=" is_clang=false use_sysroot=false"
+# Use libstdc++ rather than the built-in libc++. We use libstdc++ later when
+# linking with go-webrtc, and the two libraries are ABI-incompatible (different
+# types for std::string, for example).
+GN_ARGS+=" use_custom_libcxx=false use_custom_libcxx_for_host=false"
 [% IF c("var/linux") -%]
   GN_ARGS+=" target_os=\"linux\" target_cpu=\"[% IF c("var/linux-i686") %]x86[% ELSE %]x64[% END %]\""
   GN_ARGS+=" gold_path=\"$INSTDIR/binutils/bin\""
@@ -116,6 +120,8 @@ GN_ARGS+=" is_clang=false use_sysroot=false"
   GN_ARGS+=" target_os=\"mac\" target_cpu=\"x64\" mac_deployment_target=\"10.7\""
   GN_ARGS+=" clang_use_chrome_plugins=false"
   GN_ARGS+=" clang_base_path=\"$clangdir\""
+  # Without use_lld=false, GN adds the option -fuse-ld=lld, which is not supported by Clang 3.8.
+  GN_ARGS+=" use_lld=false"
   # Avoid some dependencies.
   GN_ARGS+=" rtc_include_opus=false rtc_include_ilbc=false rtc_include_internal_audio_device=false"
   # Tests are needed for field_trial, metrics_default, and pc_test_utils targets
@@ -146,7 +152,7 @@ mkdir -p include lib
 cp -f $builddir/libwebrtc-magic.a [% c("var/webrtc/lib_path") %]
 INCLUDE_DIR="$PWD/include"
 cd $builddir
-for h in $(find talk/ webrtc/ -type f -name '*.h');
+for h in $(find . -type f -name '*.h');
 do
   mkdir -p "$INCLUDE_DIR/$(dirname $h)"
   cp -f "$h" "$INCLUDE_DIR/$h"
