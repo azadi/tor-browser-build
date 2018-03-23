@@ -26,13 +26,13 @@ var:
       # libwebrtc-magic.a with the C++11 ABI, we have to undo that setting here,
       # using CGO_CXXFLAGS.
       # __STDC_FORMAT_MACROS is needed for a definition of PRIxPTR from inttypes.h.
-      export CGO_CXXFLAGS="-D_GLIBCXX_USE_CXX11_ABI=1 -D__STDC_FORMAT_MACROS=1"
+      export CGO_CXXFLAGS="-D_GLIBCXX_USE_CXX11_ABI=1 -D__STDC_FORMAT_MACROS=1 -DWEBRTC_LINUX=1"
       export CGO_LDFLAGS=-latomic
     [% END -%]
     [% IF c("var/osx") -%]
       export CGO_ENABLED=1
       export CGO_CFLAGS="[% c("var/FLAGS") %] -mmacosx-version-min=10.7"
-      export CGO_CXXFLAGS="[% c("var/FLAGS") %] -stdlib=libc++ -mmacosx-version-min=10.7"
+      export CGO_CXXFLAGS="[% c("var/FLAGS") %] -stdlib=libc++ -mmacosx-version-min=10.7 -DWEBRTC_MAC=1"
       export CGO_LDFLAGS="[% c("var/FLAGS") %] -stdlib=libc++ -mmacosx-version-min=10.7"
       export CC="$clangdir/bin/clang"
       export CXX="$clangdir/bin/clang++"
