@@ -1,0 +1,20 @@
+# vim: filetype=yaml sw=2
+# ciopfs is a case-insensitive FUSE mount. It's used by the webrtc Windows
+# build in order to do case-insensitive lookup of header files (as on a Windows
+# filesystem).
+version: '[% c("abbrev") %]'
+git_url: git://repo.or.cz/ciopfs.git
+git_hash: 1b5ce871fc3853a692b5d79c9955d1dff383bbbb
+filename: '[% project %]-[% c("version") %]-[% c("var/build_id") %].tar.gz'
+var:
+  container:
+    use_container: 1
+  deps:
+    - build-essential
+    - pkg-config
+    - libglib2.0-dev
+    - libattr1-dev
+    - libfuse-dev
+
+input_files:
+  - project: container-image
