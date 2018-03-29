@@ -96,9 +96,10 @@ EOF
   mkdir -p $vs_files
   # Extract the Windows SDK into a case-insensitive ciopfs mount, where
   # build/vs_toolchain.py expects to find it.
-  tar -C /var/tmp/dist -xf $rootdir/[% c('input_files_by_name/ciopfs') %]
-  mkdir -p $vs_files.ciopfs
-  /var/tmp/dist/ciopfs/bin/ciopfs -o use_ino $vs_files.ciopfs $vs_files
+  # Doesn't work yet...
+  # tar -C /var/tmp/dist -xf $rootdir/[% c('input_files_by_name/ciopfs') %]
+  # mkdir -p $vs_files.ciopfs
+  # /var/tmp/dist/ciopfs/bin/ciopfs -o use_ino $vs_files.ciopfs $vs_files
   mkdir -p $vs_files/$win_sdk_version
   unzip -q -d $vs_files/$win_sdk_version $rootdir/[% c('input_files_by_name/win_sdk') %]
 
@@ -114,6 +115,37 @@ EOF
   # https://github.com/nico/hack/blob/3add7d1a010ac8e2bbc431c9953ecfa243cb975d/res/distrib.py#L48-L53
   # I didn't find it necessary to set LIB.
   export INCLUDE="$(jq -r '["'$(realpath $vs_files/$win_sdk_version/win_sdk/bin)'/" + (.env.INCLUDE[]|join("/"))]|join(";")' $vs_files/$win_sdk_version/win_sdk/bin/SetEnv.[% IF c("var/linux-i686") %]x86[% ELSE %]x64[% END %].json)"
+
+  # Some of the Windows code expects a case-insensitive filesystem. For example
+  # it may say "#include <winsock2.h>" when the file is named WinSock2.h, or
+  # "#include WinDef.h" when the file is named windef.h. The upsteam way to
+  # handle this is with a ciopfs mount; until that works, use this mass of
+  # symlinks.
+  # Handle a common case: mixed-case filename and lowercase reference.
+  for subdir in shared um winrt; do
+    (cd $vs_files/$win_sdk_version/win_sdk/Include/10.0.16299.0/$subdir && for h in *.h; do
+      ln -s $h $(basename $h .h | tr A-Z a-z).h || true
+    done)
+  done
+  # Lowercase filename, mixed-case reference.
+  ln -s concurrencysal.h $vs_files/$win_sdk_version/win_sdk/Include/10.0.16299.0/shared/ConcurrencySal.h
+  ln -s driverspecs.h    $vs_files/$win_sdk_version/win_sdk/Include/10.0.16299.0/shared/DriverSpecs.h
+  ln -s dxgi.h           $vs_files/$win_sdk_version/win_sdk/Include/10.0.16299.0/shared/DXGI.h
+  ln -s dxgi1_2.h        $vs_files/$win_sdk_version/win_sdk/Include/10.0.16299.0/shared/DXGI1_2.h
+  ln -s dxgiformat.h     $vs_files/$win_sdk_version/win_sdk/Include/10.0.16299.0/shared/DXGIFormat.h
+  ln -s specstrings.h    $vs_files/$win_sdk_version/win_sdk/Include/10.0.16299.0/shared/SpecStrings.h
+  ln -s windef.h         $vs_files/$win_sdk_version/win_sdk/Include/10.0.16299.0/shared/WinDef.h
+  ln -s wlantypes.h      $vs_files/$win_sdk_version/win_sdk/Include/10.0.16299.0/shared/WlanTypes.h
+  ln -s audioclient.h    $vs_files/$win_sdk_version/win_sdk/Include/10.0.16299.0/um/AudioClient.h
+  ln -s audiopolicy.h    $vs_files/$win_sdk_version/win_sdk/Include/10.0.16299.0/um/Audiopolicy.h
+  ln -s d3dcommon.h      $vs_files/$win_sdk_version/win_sdk/Include/10.0.16299.0/um/D3DCommon.h
+  ln -s d3d11.h          $vs_files/$win_sdk_version/win_sdk/Include/10.0.16299.0/um/D3D11.h
+  ln -s functiondiscoverykeys_devpkey.h $vs_files/$win_sdk_version/win_sdk/Include/10.0.16299.0/um/Functiondiscoverykeys_devpkey.h
+  ln -s iphlpapi.h       $vs_files/$win_sdk_version/win_sdk/Include/10.0.16299.0/um/Iphlpapi.h
+  ln -s mmdeviceapi.h    $vs_files/$win_sdk_version/win_sdk/Include/10.0.16299.0/um/Mmdeviceapi.h
+  ln -s mmsystem.h       $vs_files/$win_sdk_version/win_sdk/Include/10.0.16299.0/um/MMSystem.h
+  ln -s mmsystem.h       $vs_files/$win_sdk_version/win_sdk/Include/10.0.16299.0/um/Mmsystem.h
+  ln -s vfwmsgs.h        $vs_files/$win_sdk_version/win_sdk/Include/10.0.16299.0/um/VFWMSGS.H
 [% END -%]
 
 [% IF c("var/linux") -%]
