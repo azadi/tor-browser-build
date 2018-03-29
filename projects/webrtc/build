@@ -2,6 +2,18 @@
 set -e
 [% c("var/set_default_env") -%]
 [% c("var/setarch") -%]
+[% IF c("var/windows") -%]
+  # This gcc is used only to compile the bootstrap gn.
+  mkdir -p /var/tmp/dist
+  tar -C /var/tmp/dist -xf $rootdir/[% c('input_files_by_name/gcc') %]
+  hgccdir=/var/tmp/dist/gcc
+  export PATH=$hgccdir/bin:$PATH
+  [% IF c("var/windows-i686") -%]
+  export LD_LIBRARY_PATH=$hgccdir/lib
+  [% ELSE -%]
+  export LD_LIBRARY_PATH=$hgccdir/lib64
+  [% END -%]
+[% END -%]
 distdir=/var/tmp/dist/[% project %]
 [% pc(c('var/compiler'), 'var/setup', { compiler_tarfile => c('input_files_by_name/' _ c('var/compiler')) }) %]
 
@@ -40,8 +52,11 @@ cd $builddir
 [% IF c("var/osx") -%]
   patch -p1 < $rootdir/webrtc-mac.patch
 [% END -%]
+[% IF c("var/windows") -%]
+  patch -p1 < $rootdir/webrtc-windows.patch
+[% END -%]
 
-[% IF c("var/linux") -%]
+[% IF c("var/linux") || c("var/windows") -%]
   # First, build a copy of GN, rather than use the prebuilt copy in buildtools/linux64.
   cd tools/gn
   # __STDC_FORMAT_MACROS is needed for a definition of PRIxPTR from inttypes.h.
@@ -75,7 +90,31 @@ print("xcode_build=\"7.3\"")
 print("xcode_version=\"0730\"")
 EOF
 [% END -%]
+[% IF c("var/windows") -%]
+  win_sdk_version=[% pc('win_sdk', 'version') %]
+  vs_files=third_party/depot_tools/win_toolchain/vs_files
+  mkdir -p $vs_files
+  # Extract the Windows SDK into a case-insensitive ciopfs mount, where
+  # build/vs_toolchain.py expects to find it.
+  tar -C /var/tmp/dist -xf $rootdir/[% c('input_files_by_name/ciopfs') %]
+  mkdir -p $vs_files.ciopfs
+  /var/tmp/dist/ciopfs/bin/ciopfs -o use_ino $vs_files.ciopfs $vs_files
+  mkdir -p $vs_files/$win_sdk_version
+  unzip -q -d $vs_files/$win_sdk_version $rootdir/[% c('input_files_by_name/win_sdk') %]
 
+  # Override the desired Windows SDK hash with the one we have.
+  sed -i -e '/^def _GetDesiredVsToolchainHashes/,/^\($\|[^ ]\)/ {s/return \[.*/return ["'$win_sdk_version'"]/}' build/vs_toolchain.py
+
+  # This command generates the build/win_toolchain.json file.
+  build/vs_toolchain.py update --force
+
+  # For some reason, the necessary INCLUDE environment variable, which defines
+  # the header search path, isn't set automatically. Construct one out of the
+  # contents of SetEnv.{x86,x64}.json. Compare to
+  # https://github.com/nico/hack/blob/3add7d1a010ac8e2bbc431c9953ecfa243cb975d/res/distrib.py#L48-L53
+  # I didn't find it necessary to set LIB.
+  export INCLUDE="$(jq -r '["'$(realpath $vs_files/$win_sdk_version/win_sdk/bin)'/" + (.env.INCLUDE[]|join("/"))]|join(";")' $vs_files/$win_sdk_version/win_sdk/bin/SetEnv.[% IF c("var/linux-i686") %]x86[% ELSE %]x64[% END %].json)"
+[% END -%]
 
 [% IF c("var/linux") -%]
   export CC=gcc
@@ -131,9 +170,18 @@ GN_ARGS+=" use_custom_libcxx=false use_custom_libcxx_for_host=false"
   rm -rf third_party/llvm-build
   rm -rf third_party/binutils
 [% END -%]
+[% IF c("var/windows") -%]
+  # Note, starting GN_ARGS over empty.
+  GN_ARGS=""
+  GN_ARGS+=" target_os=\"win\" target_cpu=\"[% IF c("var/windows-i686") %]x86[% ELSE %]x64[% END %]\""
+[% END -%]
 rm -rf out/Release
 "$GN" gen out/Release --args="$GN_ARGS"
 ninja -C out/Release webrtc field_trial metrics_default pc_test_utils
+[% IF c("var/linux") -%]
+"$AR" crs libwebrtc-magic.a $(find out/Release/obj -name '*.o' | sort)
+[% END -%]
+[% IF c("var/osx") -%]
 # The cctools ar doesn't have the 'D' deterministic option of GNU ar, but the
 # ZERO_AR_DATE environment variable similarly sets timestamps within the
 # archive to zero.
@@ -144,7 +192,11 @@ ninja -C out/Release webrtc field_trial metrics_default pc_test_utils
 # like that, not necessarily of the target architecture, and anyway are not
 # needed.
 # https://bugs.torproject.org/22832
-[% IF c("var/osx") %]ZERO_AR_DATE=1 [% END %]"$AR" crs libwebrtc-magic.a $(find out/Release/obj -name '*.o' | sort)
+ZERO_AR_DATE=1 "$AR" crs libwebrtc-magic.a $(find out/Release/obj -name '*.o' | sort)
+[% END -%]
+[% IF c("var/windows") -%]
+cp out/Release/obj/webrtc.lib libwebrtc-magic.a
+[% END -%]
 
 mkdir -p $distdir
 cd $distdir
@@ -152,11 +204,13 @@ mkdir -p include lib
 cp -f $builddir/libwebrtc-magic.a [% c("var/webrtc/lib_path") %]
 INCLUDE_DIR="$PWD/include"
 cd $builddir
-for h in $(find . -type f -name '*.h');
+(IFS= # Disable word splitting by read.
+find . -type f -name '*.h' -print0 | while read -r -d "" h
 do
   mkdir -p "$INCLUDE_DIR/$(dirname $h)"
   cp -f "$h" "$INCLUDE_DIR/$h"
 done
+)
 
 cd /var/tmp/dist
 [% c('tar', {
