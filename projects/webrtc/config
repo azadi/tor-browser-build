@@ -25,9 +25,6 @@ input_files:
   - project: win_sdk
     name: win_sdk
     enable: '[% c("var/windows") %]'
-  - project: ciopfs
-    name: ciopfs
-    enable: '[% c("var/windows") %]'
   - filename: webrtc-linux.patch
     enable: '[% c("var/linux") %]'
   - filename: webrtc-mac.patch
