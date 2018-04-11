@@ -78,3 +78,4 @@ input_files:
     project: binutils
     enable: '[% c("var/linux") %]'
   - filename: go-webrtc.patch
+    enable: '[% c("var/windows") %]'
